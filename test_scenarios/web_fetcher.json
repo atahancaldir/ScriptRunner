@@ -5,6 +5,7 @@
             "script_name": "Fibonacci writer",
             "script_path": "write_fibonacci.cpp",
             "timeout": 200,
+            "active": true,
             "args": {
                 "n": 10
             }
@@ -12,16 +13,19 @@
         {
             "script_name": "Google fetcher",
             "script_path": "get_google_data.py",
+            "active": false,
             "timeout": 200
         },
         {
             "script_name": "Facebook fetcher",
             "script_path": "get_facebook_data.py",
+            "active": false,
             "timeout": 300
         },
         {
             "script_name": "Print data",
             "script_path": "print_data.py",
+            "active": true,
             "timeout": 500,
             "args": {
                 "data": "welcome to spaceX!",

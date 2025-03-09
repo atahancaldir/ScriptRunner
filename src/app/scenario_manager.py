@@ -29,6 +29,8 @@ class ScenarioManager:
         
         print(f"\nScenario started: {self.scenario.scenario_name}")
         for test_script in self.scenario.scripts:
+            if not test_script.active:
+                continue
             result = script_runner.run_script(test_script)
             results.append(result)
 

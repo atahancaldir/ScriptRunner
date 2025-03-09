@@ -15,6 +15,7 @@ class TestScript(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     script_name: str
     script_path: str
+    active: bool = Field(True)
     timeout: int = Field(default=500)
     args: Optional[Any] = Field(default=None)
 
