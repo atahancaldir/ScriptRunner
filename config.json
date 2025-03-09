@@ -1,0 +1,8 @@
+{
+    "zmq_port" : 5001,
+    "result_codes": {
+        "SCRIPT_FAILURE": 1,
+        "PASS" : 10,
+        "FAIL": 11
+    }
+}

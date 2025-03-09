@@ -1,0 +1,4 @@
+pydantic
+zmq
+requests
+colorama

@@ -1,0 +1,24 @@
+{
+    "scenario_name": "Web fetcher",
+    "scripts": [
+        {
+            "script_name": "Google fetcher",
+            "script_path": "get_google_data.py",
+            "timeout": 200
+        },
+        {
+            "script_name": "Facebook fetcher",
+            "script_path": "get_facebook_data.py",
+            "timeout": 300
+        },
+        {
+            "script_name": "Print data",
+            "script_path": "print_data.py",
+            "timeout": 500,
+            "args": {
+                "data": "welcome to spaceX!",
+                "line_count": 10
+            }
+        }
+    ]
+}
