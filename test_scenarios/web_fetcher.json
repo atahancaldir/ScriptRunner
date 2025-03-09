@@ -2,6 +2,14 @@
     "scenario_name": "Web fetcher",
     "scripts": [
         {
+            "script_name": "Fibonacci writer",
+            "script_path": "write_fibonacci.cpp",
+            "timeout": 200,
+            "args": {
+                "n": 10
+            }
+        },
+        {
             "script_name": "Google fetcher",
             "script_path": "get_google_data.py",
             "timeout": 200

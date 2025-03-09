@@ -4,9 +4,16 @@ import json
 import zmq
 import os
 import time
+import platform
+import sys
+
+from pathlib import Path
+
+from typing import List
+
 from colorama import Fore
 
-from utils import TEST_SCRIPTS, CONFIG
+from utils import TEST_SCRIPTS, CONFIG, TEST_SCRIPTS_API
 from models import TestScript, Result
 
 import threading
@@ -21,6 +28,63 @@ class ScriptRunner:
         
         # Initialize ZMQ context
         self.context = zmq.Context()
+
+    def __build_cpp_scripts(self, path: str) -> str:
+        # Creating build directory under test_scripts/api to store build file, if it doesnt exist
+        build_dir = os.path.join(TEST_SCRIPTS_API, "build")
+        Path(build_dir).mkdir(exist_ok=True)  # Create Path instance first
+
+        current_dir = os.getcwd()
+        script_name = os.path.split(os.path.splitext(path)[0])[1]  # Get just the filename without extension
+
+        try:
+            # Change to build directory
+            os.chdir(build_dir)
+            
+            try:
+                # Run CMake
+                subprocess.run(["cmake", ".."], 
+                             check=True,
+                             capture_output=True,
+                             text=True)
+                
+                # Run build
+                if platform.system() == "Windows":
+                    subprocess.run(["cmake", "--build", ".", "--config", "Release"],
+                                 check=True,
+                                 capture_output=True,
+                                 text=True)
+                    executable_path = os.path.join(build_dir, "Release", f"{script_name}.exe")
+                else:
+                    subprocess.run(["make"],
+                                 check=True,
+                                 capture_output=True,
+                                 text=True)
+                    executable_path = os.path.join(build_dir, script_name)
+                
+                return executable_path
+
+            except subprocess.CalledProcessError as e:
+                print(Fore.RED + f"Build failed: {e.stderr}" + Fore.RESET)
+                raise ValueError("Failed to build C++ script")
+
+        finally:
+            # Returning to original directory
+            os.chdir(current_dir)
+
+    def __get_subprocess_args(self, path: str, id: str, test_args=[]) -> List[object]:
+        args = None
+        
+        if os.path.splitext(path)[1] == ".py":
+            args = ["python3", path, id]
+        elif os.path.splitext(path)[1] == ".cpp":
+            executable_path = self.__build_cpp_scripts(path)
+            args = [executable_path, id]
+
+        if test_args:
+            args.append(json.dumps(test_args))
+
+        return args
 
     def __start_process(self, path: str, id: str, script_name: str, timeout=300, test_args=[]) -> Result:
         # Create a SUB socket for this specific process
@@ -46,9 +110,9 @@ class ScriptRunner:
 
         # Run the process with proper environment and capture output
         try:
-            args = ["python3", path, id]
-            if test_args:
-                args.append(json.dumps(test_args))
+            args = self.__get_subprocess_args(path, id, test_args)
+            if not args:
+                raise ValueError()
             result = subprocess.run(
                 args=args,
                 timeout=timeout,
@@ -57,6 +121,9 @@ class ScriptRunner:
             )
         except subprocess.TimeoutExpired:
             print(Fore.RED + f"Script timed out" + Fore.RESET)
+            result = None
+        except ValueError:
+            print(Fore.RED + f"Subprocess args could not be created" + Fore.RESET)
             result = None
 
         if result:
@@ -79,38 +146,36 @@ class ScriptRunner:
         # Only close the socket after the thread has finished or timed out
         socket.close()
         
-        return result.returncode
+        return result.returncode if result else 1
     
     def __read_process_logs(self, script_name: str, 
-                            socket: zmq.SyncSocket, 
+                            socket: zmq.Socket, 
                             stop_event: threading.Event, 
                             id: str):
         
         while not stop_event.is_set():
             try:
-                # Receive topic and message separately with timeout
-                topic, message = socket.recv_multipart()
+                # Receive topic and message with a timeout
+                topic = socket.recv_string(flags=zmq.NOBLOCK)
+                message = socket.recv_string(flags=zmq.NOBLOCK)
                 
-                # Convert bytes to string
-                topic_str = topic.decode('utf-8')
-                message_str = message.decode('utf-8')
-                
-                # Try to parse as JSON if possible, otherwise use as string
-                try:
-                    data = json.loads(message_str)
-                except json.JSONDecodeError:
-                    data = message_str
-
-                print_string = Fore.GREEN + f"{datetime.now()} " + f"[{script_name}]: "
-                print_string += Fore.CYAN + f"{data}" + Fore.RESET
+                # Verify the topic matches our script ID
+                if topic == id:
+                    print_string = (
+                        f"{Fore.GREEN}{datetime.now()} [{script_name}]: "
+                        f"{Fore.CYAN}{message}{Fore.RESET}"
+                    )
+                    print(print_string, flush=True)
                     
-                print(print_string, flush=True)
-
             except zmq.Again:
                 # Timeout occurred, just continue the loop
+                time.sleep(0.01)  # Add a small delay to prevent CPU spinning
                 continue
-            except zmq.ZMQError:
-                 # Socket might be closed or in an error state
+            except zmq.ZMQError as e:
+                print(f"ZMQ Error in log reader: {e}", file=sys.stderr)
+                break
+            except Exception as e:
+                print(f"Unexpected error in log reader: {e}", file=sys.stderr)
                 break
     
     def __get_processes(self):
@@ -120,7 +185,7 @@ class ScriptRunner:
         pass
     
     def run_script(self, test_script: TestScript) -> Result:
-        print(f"\n{Fore.YELLOW}{test_script.script_name.upper()}{Fore.RESET} ")
+        print(f"\n{Fore.YELLOW}{test_script.script_name.upper()} ({os.path.split(test_script.script_path)[-1]}){Fore.RESET}")
 
         script_path = os.path.join(TEST_SCRIPTS, test_script.script_path)
 
